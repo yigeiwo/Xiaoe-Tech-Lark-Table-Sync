@@ -681,7 +681,10 @@ class SyncApp:
                     val = extract_value(order, parts)
                     
                     if isinstance(val, list):
-                        val = json.dumps(val, ensure_ascii=False)
+                        if val and len(val) > 0:
+                            val = ', '.join(str(v) for v in val)
+                        else:
+                            val = ""
                     elif val is None:
                         val = ""
                     else:
