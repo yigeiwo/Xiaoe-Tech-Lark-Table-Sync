@@ -632,32 +632,53 @@ class SyncApp:
                 fields = {}
                 for m in current_mapping:
                     xiaoe_path = m['xiaoe']
-                    val = order
+                    
+                    def extract_value(obj, path_parts):
+                        if not path_parts:
+                            return obj
+                        
+                        part = path_parts[0]
+                        remaining = path_parts[1:]
+                        
+                        if not part:
+                            return extract_value(obj, remaining)
+                        
+                        if part == '[]':
+                            if isinstance(obj, list):
+                                if not remaining:
+                                    return obj
+                                results = []
+                                for item in obj:
+                                    result = extract_value(item, remaining)
+                                    if isinstance(result, list):
+                                        results.extend(result)
+                                    else:
+                                        results.append(result)
+                                return results if results else ''
+                            else:
+                                return ''
+                        
+                        elif isinstance(obj, dict):
+                            val = obj.get(part, '')
+                            return extract_value(val, remaining)
+                        
+                        elif isinstance(obj, list):
+                            results = []
+                            for item in obj:
+                                if isinstance(item, dict):
+                                    val = item.get(part, '')
+                                    result = extract_value(val, remaining)
+                                    if isinstance(result, list):
+                                        results.extend(result)
+                                    else:
+                                        results.append(result)
+                            return results if results else ''
+                        
+                        else:
+                            return ''
                     
                     parts = xiaoe_path.replace('[]', '.[]').split('.')
-                    for part in parts:
-                        if not part:
-                            continue
-                        if part == '[]':
-                            if isinstance(val, list):
-                                val = val
-                            else:
-                                val = ''
-                                break
-                        elif isinstance(val, dict):
-                            val = val.get(part, '')
-                        elif isinstance(val, list):
-                            temp_vals = []
-                            for item in val:
-                                if isinstance(item, dict):
-                                    temp_vals.append(item.get(part, ''))
-                                else:
-                                    temp_vals.append('')
-                            val = temp_vals if temp_vals else ''
-                            break
-                        else:
-                            val = ''
-                            break
+                    val = extract_value(order, parts)
                     
                     if isinstance(val, list):
                         val = json.dumps(val, ensure_ascii=False)
