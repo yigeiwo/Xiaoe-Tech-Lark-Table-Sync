@@ -629,78 +629,96 @@ class SyncApp:
             to_update = []
             
             for order in orders:
-                fields = {}
-                for m in current_mapping:
-                    xiaoe_path = m['xiaoe']
+                good_list = order.get('good_list', [])
+                if not good_list or len(good_list) == 0:
+                    good_list = [{}]
+                
+                for good_idx, good_item in enumerate(good_list):
+                    expanded_order = {}
+                    for key, value in order.items():
+                        if key == 'good_list':
+                            expanded_order['good_item'] = good_item
+                        else:
+                            expanded_order[key] = value
                     
-                    def extract_value(obj, path_parts):
-                        if not path_parts:
-                            return obj
+                    fields = {}
+                    for m in current_mapping:
+                        xiaoe_path = m['xiaoe']
                         
-                        part = path_parts[0]
-                        remaining = path_parts[1:]
-                        
-                        if not part:
-                            return extract_value(obj, remaining)
-                        
-                        if part == '[]':
-                            if isinstance(obj, list):
-                                if not remaining:
-                                    return obj
+                        def extract_value(obj, path_parts):
+                            if not path_parts:
+                                return obj
+                            
+                            part = path_parts[0]
+                            remaining = path_parts[1:]
+                            
+                            if not part:
+                                return extract_value(obj, remaining)
+                            
+                            if part == 'good_list':
+                                if len(remaining) > 0 and remaining[0] == '[]':
+                                    return extract_value(obj.get('good_item', {}), remaining[1:])
+                                else:
+                                    return extract_value(obj.get('good_list', []), remaining)
+                            
+                            if part == '[]':
+                                if isinstance(obj, list):
+                                    if not remaining:
+                                        return obj
+                                    results = []
+                                    for item in obj:
+                                        result = extract_value(item, remaining)
+                                        if isinstance(result, list):
+                                            results.extend(result)
+                                        else:
+                                            results.append(result)
+                                    return results if results else ''
+                                else:
+                                    return ''
+                            
+                            elif isinstance(obj, dict):
+                                val = obj.get(part, '')
+                                return extract_value(val, remaining)
+                            
+                            elif isinstance(obj, list):
                                 results = []
                                 for item in obj:
-                                    result = extract_value(item, remaining)
-                                    if isinstance(result, list):
-                                        results.extend(result)
-                                    else:
-                                        results.append(result)
+                                    if isinstance(item, dict):
+                                        val = item.get(part, '')
+                                        result = extract_value(val, remaining)
+                                        if isinstance(result, list):
+                                            results.extend(result)
+                                        else:
+                                            results.append(result)
                                 return results if results else ''
+                            
                             else:
                                 return ''
                         
-                        elif isinstance(obj, dict):
-                            val = obj.get(part, '')
-                            return extract_value(val, remaining)
+                        parts = xiaoe_path.replace('[]', '.[]').split('.')
+                        val = extract_value(expanded_order, parts)
                         
-                        elif isinstance(obj, list):
-                            results = []
-                            for item in obj:
-                                if isinstance(item, dict):
-                                    val = item.get(part, '')
-                                    result = extract_value(val, remaining)
-                                    if isinstance(result, list):
-                                        results.extend(result)
-                                    else:
-                                        results.append(result)
-                            return results if results else ''
-                        
-                        else:
-                            return ''
-                    
-                    parts = xiaoe_path.replace('[]', '.[]').split('.')
-                    val = extract_value(order, parts)
-                    
-                    if isinstance(val, list):
-                        if val and len(val) > 0:
-                            val = ', '.join(str(v) for v in val)
-                        else:
+                        if isinstance(val, list):
+                            if val and len(val) > 0:
+                                val = ', '.join(str(v) for v in val)
+                            else:
+                                val = ""
+                        elif val is None:
                             val = ""
-                    elif val is None:
-                        val = ""
-                    else:
-                        val = str(val)
+                        else:
+                            val = str(val)
+                        
+                        fields[m['feishu']] = val
                     
-                    fields[m['feishu']] = val
-                
-                order_unique_val = str(fields.get(unique_feishu_col, ''))
-                
-                if order_unique_val in feishu_id_map:
-                    to_update.append({
-                        "record_id": feishu_id_map[order_unique_val],
-                        "fields": fields
-                    })
-                else:
-                    to_create.append({"fields": fields})
+                    order_unique_val = str(fields.get(unique_feishu_col, ''))
+                    
+                    if order_unique_val in feishu_id_map:
+                        to_update.append({
+                            "record_id": feishu_id_map[order_unique_val],
+                            "fields": fields
+                        })
+                    else:
+                        to_create.append({"fields": fields})
 
             success_count = 0
             if to_create:
